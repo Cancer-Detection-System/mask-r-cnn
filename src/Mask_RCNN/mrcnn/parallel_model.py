@@ -1,18 +1,3 @@
-"""
-Mask R-CNN
-Multi-GPU Support for Keras.
-
-Copyright (c) 2017 Matterport, Inc.
-Licensed under the MIT License (see LICENSE for details)
-Written by Waleed Abdulla
-
-Ideas and a small code snippets from these sources:
-https://github.com/fchollet/keras/issues/2436
-https://medium.com/@kuza55/transparent-multi-gpu-training-on-tensorflow-with-keras-8b0016fd9012
-https://github.com/avolkov1/keras_experiments/blob/master/keras_exp/multigpu/
-https://github.com/fchollet/keras/blob/master/keras/utils/training_utils.py
-"""
-
 import tensorflow as tf
 import keras.backend as K
 import keras.layers as KL
@@ -41,41 +26,41 @@ class ParallelModel(KM.Model):
     def __getattribute__(self, attrname):
         """Redirect loading and saving methods to the inner model. That's where
         the weights are stored."""
-        if 'load' in attrname or 'save' in attrname:
+        if hasattr(self.inner_model, attrname):
             return getattr(self.inner_model, attrname)
         return super(ParallelModel, self).__getattribute__(attrname)
+
 
     def summary(self, *args, **kwargs):
         """Override summary() to display summaries of both, the wrapper
         and inner models."""
         super(ParallelModel, self).summary(*args, **kwargs)
+        print(f"Inner Model Summary:\n{'-'*50}")
         self.inner_model.summary(*args, **kwargs)
+
 
     def make_parallel(self):
         """Creates a new wrapper model that consists of multiple replicas of
         the original model placed on different GPUs.
-        """
+            """
         # Slice inputs. Slice inputs on the CPU to avoid sending a copy
         # of the full inputs to all GPUs. Saves on bandwidth and memory.
-        input_slices = {name: tf.split(x, self.gpu_count)
+        input_slices = {name: tf.split(x, self.gpu_count, axis=0)
                         for name, x in zip(self.inner_model.input_names,
-                                           self.inner_model.inputs)}
-
+                                       self.inner_model.inputs)}
         output_names = self.inner_model.output_names
-        outputs_all = []
-        for i in range(len(self.inner_model.outputs)):
-            outputs_all.append([])
+        outputs_all = [[] for _ in range(len(self.inner_model.outputs))]
 
         # Run the model call() on each GPU to place the ops there
         for i in range(self.gpu_count):
-            with tf.device('/gpu:%d' % i):
-                with tf.name_scope('tower_%d' % i):
+            with tf.device(f"/gpu:{i}"):
+                with tf.name_scope(f"tower_{i}"):
                     # Run a slice of inputs through this replica
                     zipped_inputs = zip(self.inner_model.input_names,
                                         self.inner_model.inputs)
                     inputs = [
                         KL.Lambda(lambda s: input_slices[name][i],
-                                  output_shape=lambda s: (None,) + s[1:])(tensor)
+                                output_shape=lambda s: (None,) + s[1:])(tensor)
                         for name, tensor in zipped_inputs]
                     # Create the model replica and get the outputs
                     outputs = self.inner_model(inputs)
@@ -85,8 +70,8 @@ class ParallelModel(KM.Model):
                     for l, o in enumerate(outputs):
                         outputs_all[l].append(o)
 
-        # Merge outputs on CPU
-        with tf.device('/cpu:0'):
+    # Merge outputs on CPU
+        with tf.device("/cpu:0"):
             merged = []
             for outputs, name in zip(outputs_all, output_names):
                 # Concatenate or average outputs?
@@ -96,12 +81,13 @@ class ParallelModel(KM.Model):
                 # Keras expects losses and metrics to be scalars.
                 if K.int_shape(outputs[0]) == ():
                     # Average
-                    m = KL.Lambda(lambda o: tf.add_n(o) / len(outputs), name=name)(outputs)
+                    m = KL.Lambda(lambda o: tf.math.reduce_mean(o), name=name)(outputs)
                 else:
                     # Concatenate
                     m = KL.Concatenate(axis=0, name=name)(outputs)
                 merged.append(m)
         return merged
+
 
 
 if __name__ == "__main__":
@@ -126,9 +112,9 @@ if __name__ == "__main__":
     MODEL_DIR = os.path.join(ROOT_DIR, "logs")
 
     def build_model(x_train, num_classes):
-        # Reset default graph. Keras leaves old ops in the graph,
-        # which are ignored for execution but clutter graph
-        # visualization in TensorBoard.
+    # Reset default graph. Keras leaves old ops in the graph,
+    # which are ignored for execution but clutter graph
+    # visualization in TensorBoard.
         tf.reset_default_graph()
 
         inputs = KL.Input(shape=x_train.shape[1:], name="input_image")
@@ -141,7 +127,9 @@ if __name__ == "__main__":
         x = KL.Dense(128, activation='relu', name="dense1")(x)
         x = KL.Dense(num_classes, activation='softmax', name="dense2")(x)
 
-        return KM.Model(inputs, x, "digit_classifier_model")
+        return KM.Model(inputs, x)
+
+
 
     # Load MNIST Data
     (x_train, y_train), (x_test, y_test) = mnist.load_data()

@@ -1,12 +1,3 @@
-"""
-Mask R-CNN
-The main Mask R-CNN model implementation.
-
-Copyright (c) 2017 Matterport, Inc.
-Licensed under the MIT License (see LICENSE for details)
-Written by Waleed Abdulla
-"""
-
 import os
 import datetime
 import re
@@ -21,28 +12,18 @@ import tensorflow.keras.layers as KL
 import tensorflow.keras.utils as KU
 from tensorflow.python.eager import context
 import tensorflow.keras.models as KM
-
 from mrcnn import utils
 
-
-############################################################
-#  Utility Functions
-############################################################
-
-
 def log(text, array=None):
-    """Prints a text message. And, optionally, if a Numpy array is provided it
-    prints it's shape, min, and max values.
-    """
     if array is not None:
-        text = text.ljust(25)
-        text += ("shape: {:20}  ".format(str(array.shape)))
+        text = f"{text.ljust(25)} shape: {str(array.shape):20}"
         if array.size:
-            text += ("min: {:10.5f}  max: {:10.5f}".format(array.min(), array.max()))
+            text += f"  min: {array.min():10.5f}  max: {array.max():10.5f}"
         else:
-            text += ("min: {:10}  max: {:10}".format("", ""))
-        text += "  {}".format(array.dtype)
+            text += "  min: {:10}  max: {:10}".format("", "")
+        text += f"  {array.dtype}"
     print(text)
+
 
 
 class BatchNorm(KL.BatchNormalization):
